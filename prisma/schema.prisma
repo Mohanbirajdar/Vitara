@@ -1,0 +1,204 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  avatar    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  patientProfile    PatientProfile?
+  medicalRecords    MedicalRecord[]
+  observations      Observation[]
+  conditions        Condition[]
+  medications       Medication[]
+  medicationLogs    MedicationLog[]
+  symptomLogs       SymptomLog[]
+  notes             Note[]
+  providerConnections ProviderConnection[]
+
+  @@map("users")
+}
+
+model PatientProfile {
+  id               String   @id @default(cuid())
+  userId           String   @unique
+  dateOfBirth      DateTime?
+  bloodType        String?
+  height           Float?
+  weight           Float?
+  allergies        String[]
+  emergencyContact Json?
+  isAnonymized     Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("patient_profiles")
+}
+
+enum SourceType {
+  FHIR
+  MANUAL
+  OCR
+}
+
+model MedicalRecord {
+  id            String     @id @default(cuid())
+  userId        String
+  title         String
+  type          String
+  date          DateTime
+  provider      String?
+  sourceType    SourceType @default(MANUAL)
+  isHidden      Boolean    @default(false)
+  isEdited      Boolean    @default(false)
+  originalData  Json?
+  editedData    Json?
+  notes         String?
+  attachmentUrl String?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  observations Observation[]
+  recordNotes  Note[]
+
+  @@map("medical_records")
+}
+
+model Observation {
+  id             String   @id @default(cuid())
+  recordId       String?
+  userId         String
+  type           String
+  value          String
+  unit           String?
+  date           DateTime
+  referenceRange String?
+  isAbnormal     Boolean  @default(false)
+  createdAt      DateTime @default(now())
+
+  record MedicalRecord? @relation(fields: [recordId], references: [id], onDelete: SetNull)
+  user   User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("observations")
+}
+
+model Condition {
+  id          String    @id @default(cuid())
+  userId      String
+  name        String
+  status      String    @default("active")
+  onsetDate   DateTime?
+  resolvedDate DateTime?
+  notes       String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("conditions")
+}
+
+model Medication {
+  id           String    @id @default(cuid())
+  userId       String
+  name         String
+  dosage       String
+  frequency    String
+  startDate    DateTime
+  endDate      DateTime?
+  isActive     Boolean   @default(true)
+  prescribedBy String?
+  notes        String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  medicationLogs MedicationLog[]
+
+  @@map("medications")
+}
+
+enum MedicationStatus {
+  TAKEN
+  MISSED
+  SKIPPED
+}
+
+model MedicationLog {
+  id            String           @id @default(cuid())
+  medicationId  String
+  userId        String
+  scheduledTime DateTime
+  takenAt       DateTime?
+  status        MedicationStatus
+  notes         String?
+  createdAt     DateTime         @default(now())
+
+  medication Medication @relation(fields: [medicationId], references: [id], onDelete: Cascade)
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("medication_logs")
+}
+
+model SymptomLog {
+  id          String   @id @default(cuid())
+  userId      String
+  symptomName String
+  severity    Int
+  notes       String?
+  date        DateTime
+  createdAt   DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("symptom_logs")
+}
+
+model Note {
+  id              String   @id @default(cuid())
+  userId          String
+  recordId        String?
+  title           String
+  content         String
+  appointmentDate DateTime?
+  tags            String[]
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user   User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  record MedicalRecord? @relation(fields: [recordId], references: [id], onDelete: SetNull)
+
+  @@map("notes")
+}
+
+model ProviderConnection {
+  id           String   @id @default(cuid())
+  userId       String
+  providerName String
+  providerType String
+  status       String   @default("pending")
+  lastSynced   DateTime?
+  authToken    String?
+  endpoint     String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("provider_connections")
+}
