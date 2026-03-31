@@ -1,24 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { getOrCreateDbUser } from '@/lib/auth'
+import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
+import { cookies } from 'next/headers'
 
-const DEMO_USER_ID = 'cmndze6o5000053elv1ept3gs'
+async function getUserId() {
+  const supabase = createRouteHandlerClient({ cookies })
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session?.user) return null
+  await getOrCreateDbUser(session.user.id, session.user.email!, session.user.user_metadata?.name)
+  return session.user.id
+}
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
-    const { searchParams } = new URL(request.url)
-    const search = searchParams.get('search')
-    const tag = searchParams.get('tag')
+    const userId = await getUserId()
+    if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    const where: Record<string, unknown> = { userId: DEMO_USER_ID }
-    if (search) {
-      where.OR = [
-        { title: { contains: search, mode: 'insensitive' } },
-        { content: { contains: search, mode: 'insensitive' } },
-      ]
-    }
-    if (tag) where.tags = { has: tag }
-
-    const notes = await prisma.note.findMany({ where, orderBy: { createdAt: 'desc' } })
+    const notes = await prisma.note.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+    })
     return NextResponse.json({ data: notes, total: notes.length })
   } catch (e) {
     console.error(e)
@@ -28,33 +30,36 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const userId = await getUserId()
+    if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
     const body = await request.json()
-    if (!body.title || !body.content) {
-      return NextResponse.json({ error: 'title and content required' }, { status: 400 })
-    }
     const note = await prisma.note.create({
       data: {
-        userId: DEMO_USER_ID,
-        recordId: body.recordId || null,
+        userId,
         title: body.title,
         content: body.content,
         appointmentDate: body.appointmentDate ? new Date(body.appointmentDate) : null,
-        tags: Array.isArray(body.tags) ? body.tags : [],
+        tags: body.tags || [],
       },
     })
-    return NextResponse.json({ data: note, message: 'Note saved' }, { status: 201 })
+    return NextResponse.json({ data: note }, { status: 201 })
   } catch (e) {
     console.error(e)
-    return NextResponse.json({ error: 'Failed to save note' }, { status: 500 })
+    return NextResponse.json({ error: 'Failed to create note' }, { status: 500 })
   }
 }
 
 export async function DELETE(request: NextRequest) {
   try {
+    const userId = await getUserId()
+    if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
     if (!id) return NextResponse.json({ error: 'ID required' }, { status: 400 })
-    await prisma.note.delete({ where: { id } })
+
+    await prisma.note.delete({ where: { id, userId } })
     return NextResponse.json({ message: 'Note deleted' })
   } catch (e) {
     console.error(e)

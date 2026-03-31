@@ -1,19 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { getOrCreateDbUser } from '@/lib/auth'
+import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
+import { cookies } from 'next/headers'
 
-const DEMO_USER_ID = 'cmndze6o5000053elv1ept3gs'
+async function getUserId() {
+  const supabase = createRouteHandlerClient({ cookies })
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session?.user) return null
+  await getOrCreateDbUser(session.user.id, session.user.email!, session.user.user_metadata?.name)
+  return session.user.id
+}
 
 export async function GET() {
   try {
+    const userId = await getUserId()
+    if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
     const providers = await prisma.providerConnection.findMany({
-      where: { userId: DEMO_USER_ID },
+      where: { userId },
       orderBy: { createdAt: 'desc' },
     })
-    return NextResponse.json({
-      data: providers,
-      total: providers.length,
-      connected: providers.filter(p => p.status === 'connected').length,
-    })
+    return NextResponse.json({ data: providers, total: providers.length })
   } catch (e) {
     console.error(e)
     return NextResponse.json({ error: 'Failed to fetch providers' }, { status: 500 })
@@ -22,34 +30,36 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
   try {
+    const userId = await getUserId()
+    if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
     const body = await request.json()
-    if (!body.providerName || !body.providerType) {
-      return NextResponse.json({ error: 'providerName and providerType required' }, { status: 400 })
-    }
     const provider = await prisma.providerConnection.create({
       data: {
-        userId: DEMO_USER_ID,
+        userId,
         providerName: body.providerName,
-        providerType: body.providerType,
-        status: 'pending',
-        endpoint: body.endpoint || null,
+        providerType: body.providerType || 'OTHER',
+        status: 'connected',
       },
     })
-    return NextResponse.json({ data: provider, message: 'Provider connected' }, { status: 201 })
+    return NextResponse.json({ data: provider }, { status: 201 })
   } catch (e) {
     console.error(e)
-    return NextResponse.json({ error: 'Failed to connect provider' }, { status: 500 })
+    return NextResponse.json({ error: 'Failed to create provider' }, { status: 500 })
   }
 }
 
 export async function PATCH(request: NextRequest) {
   try {
+    const userId = await getUserId()
+    if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
     const body = await request.json()
-    const { id, action, ...updates } = body
-    const data = action === 'sync'
-      ? { status: 'connected', lastSynced: new Date() }
-      : updates
-    const provider = await prisma.providerConnection.update({ where: { id }, data })
+    const { id, ...updates } = body
+    const provider = await prisma.providerConnection.update({
+      where: { id },
+      data: { ...updates, lastSynced: updates.status === 'connected' ? new Date() : undefined },
+    })
     return NextResponse.json({ data: provider })
   } catch (e) {
     console.error(e)
@@ -59,10 +69,14 @@ export async function PATCH(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
+    const userId = await getUserId()
+    if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
     if (!id) return NextResponse.json({ error: 'ID required' }, { status: 400 })
-    await prisma.providerConnection.delete({ where: { id } })
+
+    await prisma.providerConnection.delete({ where: { id, userId } })
     return NextResponse.json({ message: 'Provider disconnected' })
   } catch (e) {
     console.error(e)

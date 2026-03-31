@@ -1,18 +1,29 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { getOrCreateDbUser } from '@/lib/auth'
+import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
+import { cookies } from 'next/headers'
 
-// Demo user ID – replace with auth session in production
-const DEMO_USER_ID = 'cmndze6o5000053elv1ept3gs'
+async function getUserId() {
+  const supabase = createRouteHandlerClient({ cookies })
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session?.user) return null
+  await getOrCreateDbUser(session.user.id, session.user.email!, session.user.user_metadata?.name)
+  return session.user.id
+}
 
 export async function GET(request: NextRequest) {
   try {
+    const userId = await getUserId()
+    if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
     const { searchParams } = new URL(request.url)
     const type = searchParams.get('type')
     const isHidden = searchParams.get('isHidden')
     const page = parseInt(searchParams.get('page') || '1')
     const pageSize = parseInt(searchParams.get('pageSize') || '10')
 
-    const where: Record<string, unknown> = { userId: DEMO_USER_ID }
+    const where: Record<string, unknown> = { userId }
     if (type) where.type = type
     where.isHidden = isHidden === 'true' ? true : false
 
@@ -35,10 +46,13 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const userId = await getUserId()
+    if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
     const body = await request.json()
     const record = await prisma.medicalRecord.create({
       data: {
-        userId: DEMO_USER_ID,
+        userId,
         title: body.title,
         type: body.type,
         date: new Date(body.date),
@@ -57,6 +71,9 @@ export async function POST(request: NextRequest) {
 
 export async function PATCH(request: NextRequest) {
   try {
+    const userId = await getUserId()
+    if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
     const body = await request.json()
     const { id, ...updates } = body
     const record = await prisma.medicalRecord.update({
@@ -72,6 +89,9 @@ export async function PATCH(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
+    const userId = await getUserId()
+    if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
     if (!id) return NextResponse.json({ error: 'ID required' }, { status: 400 })

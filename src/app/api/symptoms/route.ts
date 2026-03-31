@@ -1,19 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { getOrCreateDbUser } from '@/lib/auth'
+import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
+import { cookies } from 'next/headers'
 
-const DEMO_USER_ID = 'cmndze6o5000053elv1ept3gs'
+async function getUserId() {
+  const supabase = createRouteHandlerClient({ cookies })
+  const { data: { session } } = await supabase.auth.getSession()
+  if (!session?.user) return null
+  await getOrCreateDbUser(session.user.id, session.user.email!, session.user.user_metadata?.name)
+  return session.user.id
+}
 
 export async function GET(request: NextRequest) {
   try {
+    const userId = await getUserId()
+    if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
     const { searchParams } = new URL(request.url)
-    const symptomName = searchParams.get('symptomName')
     const limit = parseInt(searchParams.get('limit') || '50')
 
-    const where: Record<string, unknown> = { userId: DEMO_USER_ID }
-    if (symptomName) where.symptomName = { contains: symptomName, mode: 'insensitive' }
-
     const symptoms = await prisma.symptomLog.findMany({
-      where,
+      where: { userId },
       orderBy: { date: 'desc' },
       take: limit,
     })
@@ -26,20 +34,20 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const userId = await getUserId()
+    if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
     const body = await request.json()
-    if (!body.symptomName || typeof body.severity !== 'number') {
-      return NextResponse.json({ error: 'symptomName and severity required' }, { status: 400 })
-    }
-    const log = await prisma.symptomLog.create({
+    const symptom = await prisma.symptomLog.create({
       data: {
-        userId: DEMO_USER_ID,
-        symptomName: body.symptomName,
+        userId,
+        symptomName: body.symptomName || body.symptom,
         severity: body.severity,
         notes: body.notes || null,
-        date: body.date ? new Date(body.date) : new Date(),
+        date: body.loggedAt ? new Date(body.loggedAt) : (body.date ? new Date(body.date) : new Date()),
       },
     })
-    return NextResponse.json({ data: log, message: 'Symptom logged' }, { status: 201 })
+    return NextResponse.json({ data: symptom }, { status: 201 })
   } catch (e) {
     console.error(e)
     return NextResponse.json({ error: 'Failed to log symptom' }, { status: 500 })
