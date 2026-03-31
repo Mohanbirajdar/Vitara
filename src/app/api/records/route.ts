@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 
 // Demo user ID – replace with auth session in production
-const DEMO_USER_ID = 'cmnd6w58s0000iiaqkbbvrtcs'
+const DEMO_USER_ID = 'cmndze6o5000053elv1ept3gs'
 
 export async function GET(request: NextRequest) {
   try {
