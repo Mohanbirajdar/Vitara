@@ -2,6 +2,7 @@ import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs'
 import { cookies } from 'next/headers'
 import { NextResponse } from 'next/server'
 import { getOrCreateDbUser } from '@/lib/auth'
+import { prisma } from '@/lib/prisma'
 
 export async function POST() {
   try {
@@ -34,7 +35,12 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    return NextResponse.json({ data: { id: session.user.id, email: session.user.email } })
+    const user = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      include: { patientProfile: true },
+    })
+
+    return NextResponse.json({ data: user ?? { id: session.user.id, email: session.user.email, name: session.user.user_metadata?.name } })
   } catch (e) {
     console.error(e)
     return NextResponse.json({ error: 'Failed to get user' }, { status: 500 })
