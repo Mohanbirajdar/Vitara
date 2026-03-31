@@ -40,9 +40,9 @@ export default function SignupPage() {
       // Create DB user immediately (works when email confirm is disabled)
       await fetch('/api/auth/me', { method: 'POST' })
 
-      // If session exists, user is auto-confirmed — go to dashboard
+      // If session exists, user is auto-confirmed — go to onboarding
       if (data.session) {
-        router.push('/dashboard')
+        router.push('/onboarding')
         router.refresh()
       } else {
         // Email confirmation required

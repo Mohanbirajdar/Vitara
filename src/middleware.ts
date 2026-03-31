@@ -19,8 +19,9 @@ export async function middleware(req: NextRequest) {
 
   const isProtected = PROTECTED_PATHS.some(p => pathname === p || pathname.startsWith(p + '/'))
   const isAuthPage = AUTH_PATHS.includes(pathname)
+  const isOnboarding = pathname === '/onboarding'
 
-  if (isProtected && !session) {
+  if ((isProtected || isOnboarding) && !session) {
     const url = req.nextUrl.clone()
     url.pathname = '/login'
     return NextResponse.redirect(url)

@@ -13,12 +13,13 @@ datasource db {
 }
 
 model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  name      String?
-  avatar    String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          String   @id @default(cuid())
+  email       String   @unique
+  name        String?
+  avatar      String?
+  isOnboarded Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   patientProfile    PatientProfile?
   medicalRecords    MedicalRecord[]
@@ -41,6 +42,12 @@ model PatientProfile {
   height           Float?
   weight           Float?
   allergies        String[]
+  conditions       String[]
+  familyHistory    String[]
+  surgicalHistory  String?
+  lifestyle        Json?
+  consentGiven     Boolean  @default(false)
+  consentDate      DateTime?
   emergencyContact Json?
   isAnonymized     Boolean  @default(false)
   createdAt        DateTime @default(now())
